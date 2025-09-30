@@ -88,4 +88,6 @@ export interface ProcessedLogEntry {
   outcome?: string;
   channel?: string; // само за diagnostic events
   name?: string; // само за exceptions
+  eventType?: string; // само за event_info
 }
+
