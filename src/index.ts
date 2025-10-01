@@ -1,5 +1,5 @@
 // hows-logger - Tail Worker за събиране на логове
-import type { ProcessedLogEntry, TraceException, TraceItem, TraceLog, TraceDiagnosticChannelEvent } from './types';
+import type { ProcessedLogEntry, TraceItem } from './types';
 
 type ConsoleMethod = 'log' | 'error';
 
@@ -28,65 +28,6 @@ const emitEntry = (entry: ProcessedLogEntry, method: ConsoleMethod = 'log') => {
   console[method](`[${prefix}] ${JSON.stringify(entry)}`);
 };
 
-const logTraceLogs = (scriptName: string | null, outcome: string, logs: TraceLog[]) => {
-  for (const { timestamp, level, message } of logs) {
-    emitEntry(
-      {
-        type: 'log',
-        timestamp: toIsoString(timestamp),
-        level,
-        message,
-        scriptName,
-        outcome
-      },
-      'log'
-    );
-  }
-};
-
-const logTraceExceptions = (scriptName: string | null, exceptions: TraceException[]) => {
-  for (const { timestamp, name, message } of exceptions) {
-    emitEntry(
-      {
-        type: 'exception',
-        timestamp: toIsoString(timestamp),
-        scriptName,
-        name,
-        message
-      },
-      'error'
-    );
-  }
-};
-
-const logDiagnosticEvents = (scriptName: string | null, diagnostics: TraceDiagnosticChannelEvent[]) => {
-  for (const { timestamp, channel, message } of diagnostics) {
-    emitEntry(
-      {
-        type: 'diagnostic',
-        timestamp: toIsoString(timestamp),
-        scriptName,
-        channel,
-        message
-      },
-      'log'
-    );
-  }
-};
-
-const logEventData = (scriptName: string | null, eventTimestamp: number | null, eventData: unknown) => {
-  emitEntry(
-    {
-      type: 'event_info',
-      timestamp: toIsoString(eventTimestamp),
-      scriptName,
-      message: safeData(eventData),
-      eventType: typeof eventData
-    },
-    'log'
-  );
-};
-
 const handleTraceItem = (trace: TraceItem) => {
   const {
     logs = [],
@@ -101,7 +42,7 @@ const handleTraceItem = (trace: TraceItem) => {
   const summary = {
     scriptName,
     outcome,
-    eventTimestamp: eventTimestamp ? toIsoString(eventTimestamp) : null,
+    eventTimestamp: toIsoString(eventTimestamp),
     logsCount: logs.length,
     exceptionsCount: exceptions.length,
     diagnosticsCount: diagnosticsChannelEvents.length
@@ -109,25 +50,50 @@ const handleTraceItem = (trace: TraceItem) => {
 
   console.log(`[EVENT] ${JSON.stringify(summary)}`);
 
-  if (logs.length > 0) {
-    logTraceLogs(scriptName, outcome, logs);
-  }
+  logs.forEach(({ timestamp, level, message }) => {
+    emitEntry({
+      type: 'log',
+      timestamp: toIsoString(timestamp),
+      level,
+      message,
+      scriptName,
+      outcome
+    });
+  });
 
-  if (exceptions.length > 0) {
-    logTraceExceptions(scriptName, exceptions);
-  }
+  exceptions.forEach(({ timestamp, name, message }) => {
+    emitEntry({
+      type: 'exception',
+      timestamp: toIsoString(timestamp),
+      scriptName,
+      name,
+      message
+    }, 'error');
+  });
 
-  if (diagnosticsChannelEvents.length > 0) {
-    logDiagnosticEvents(scriptName, diagnosticsChannelEvents);
-  }
+  diagnosticsChannelEvents.forEach(({ timestamp, channel, message }) => {
+    emitEntry({
+      type: 'diagnostic',
+      timestamp: toIsoString(timestamp),
+      scriptName,
+      channel,
+      message
+    });
+  });
 
   if (event) {
-    logEventData(scriptName, eventTimestamp, event);
+    emitEntry({
+      type: 'event_info',
+      timestamp: toIsoString(eventTimestamp),
+      scriptName,
+      message: safeData(event),
+      eventType: typeof event
+    });
   }
 };
 
 export default {
-  async tail(events, _env, _ctx) {
+  async tail(events: TraceItem[], _env: unknown, _ctx: unknown) {
     if (!events || events.length === 0) {
       return;
     }
@@ -136,12 +102,12 @@ export default {
 
     for (const trace of events) {
       try {
-        handleTraceItem(trace as TraceItem);
+        handleTraceItem(trace);
       } catch (error) {
-        console.error(`[TAIL_ERROR] Грешка при обработка на събитие: ${error instanceof Error ? error.message : error}`);
+        console.error(`[TAIL_ERROR] Грешка при обработка на събитие: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
 
     console.log(`[TAIL] Завършена обработка на ${events.length} събития`);
   }
-} satisfies ExportedHandler<Env>;
+} satisfies ExportedHandler;
