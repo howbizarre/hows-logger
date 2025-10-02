@@ -3,16 +3,18 @@ import type { ProcessedLogEntry, TraceItem } from './types';
 
 type ConsoleMethod = 'log' | 'error';
 
-const toIsoString = (timestamp?: number | null): string => {
-  if (!timestamp) {
+export const toIsoString = (timestamp?: number | null): string => {
+  if (timestamp === null || timestamp === undefined) {
     return new Date().toISOString();
   }
 
-  try {
-    return new Date(timestamp).toISOString();
-  } catch {
-    return new Date().toISOString();
+  const date = new Date(timestamp);
+
+  if (isNaN(date.getTime())) {
+    return 'Invalid Date';
   }
+
+  return date.toISOString();
 };
 
 const safeData = (value: unknown) => {
